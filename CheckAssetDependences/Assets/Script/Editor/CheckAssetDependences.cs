@@ -2,18 +2,29 @@
 using UnityEngine;
 using UnityEditor;
 using UnityEditor.AnimatedValues;
+using System;
+using System.Linq;
 public class CheckAssetDependences : EditorWindow
 {
     [MenuItem("Window/CheckAssetDependences")]
     public static void OpenWindow()
     {
-        EditorWindow.GetWindow<CheckAssetDependences>();
+        var window = (CheckAssetDependences)EditorWindow.GetWindow(typeof(CheckAssetDependences), false, "Check Asset Dependences");
     }
-    public enum SearchMode
+
+    [Serializable]
+    private enum Language
+    {
+        Japanese = 0,
+        English
+    }
+
+    [Serializable]
+    private enum SearchMode
     {
         Input = 0,
         Refer = 1,
-        InFile = 2,
+        InFolder = 2,
     }
 
     public enum AssetType
@@ -21,31 +32,51 @@ public class CheckAssetDependences : EditorWindow
         Texture,
         Material,
         Prefab,
-        Script
+        Script,
+        Mesh
     }
 
+    [Serializable]
+    private class MenuToggle<T>
+    {
+        private GUIContent[] toggles = null;
+        public GUIContent[] Toggles
+        {
+            get
+            {
+                if (toggles == null)
+                {
+                    toggles = System.Enum.GetNames(typeof(T)).Select(x => new GUIContent(x)).ToArray();
+                }
+                return toggles;
+            }
+        }
 
-    SearchMode searchMode = 0;
-    List<string> resultStr = new List<string>();
-    Vector2 resultScroll = Vector2.zero;
-    bool needCollection = true;
+
+    }
+    [SerializeField] Language language = 0;
+    [SerializeField] SearchMode searchMode = 0;
+    [SerializeField] MenuToggle<SearchMode> menuToggle = new MenuToggle<SearchMode>();
+    [SerializeField] List<string> resultStr = new List<string>();
+    [SerializeField] Vector2 resultScroll = Vector2.zero;
+    [SerializeField] bool needCollection = true;
 
     //Input用
-    string findName = "";
-    AnimBool hasFilterTypes;
-    Vector2 foundScroll = Vector2.zero;
-    List<FilterToggle> filterToggles;
-    string prebFindName;
-    List<PathLabelButton> pathLabels = new List<PathLabelButton>();
+    [SerializeField] string findName = "";
+    [SerializeField] AnimBool hasFilterTypes;
+    [SerializeField] Vector2 foundScroll = Vector2.zero;
+    [SerializeField] List<FilterToggle> filterToggles;
+    [SerializeField] string prebFindName;
+    [SerializeField] List<PathLabelButton> pathLabels = new List<PathLabelButton>();
+    [SerializeField] bool exceptPackages = true;
 
     //refer
-    Object referObj;
+    [SerializeField] UnityEngine.Object referObj;
 
     //in folder
-    Object folder;
-    List<string> searchedPathStr = new List<string>();
-    Vector2 searchedScroll = Vector2.zero;
-
+    [SerializeField] UnityEngine.Object folder;
+    [SerializeField] List<string> searchedPathStr = new List<string>();
+    [SerializeField] Vector2 searchedScroll = Vector2.zero;
     void Init()
     {
         filterToggles = new List<FilterToggle>();
@@ -53,6 +84,7 @@ public class CheckAssetDependences : EditorWindow
         filterToggles.Add(new FilterToggle(true, "Material", AssetType.Material));
         filterToggles.Add(new FilterToggle(true, "Prefab", AssetType.Prefab));
         filterToggles.Add(new FilterToggle(true, "Script", AssetType.Script));
+        filterToggles.Add(new FilterToggle(true, "Mesh", AssetType.Mesh));
         hasFilterTypes = new AnimBool(false);
         hasFilterTypes.valueChanged.AddListener(Repaint);   //EditorWindowのメソッド
 
@@ -65,6 +97,11 @@ public class CheckAssetDependences : EditorWindow
         if (filterToggles == null)
         {
             Init();
+        }
+
+        if (menuToggle == null)
+        {
+            menuToggle = new MenuToggle<SearchMode>();
         }
 
         FilterToggle.isChanged = true;
@@ -85,7 +122,14 @@ public class CheckAssetDependences : EditorWindow
         resultStr.Clear();
         findName = "";
         prebFindName = "";
-        pathLabels.Clear();
+        if (pathLabels != null)
+        {
+            pathLabels.Clear();
+        }
+        else
+        {
+            pathLabels = new List<PathLabelButton>();
+        }
 
         referObj = null;
 
@@ -93,17 +137,118 @@ public class CheckAssetDependences : EditorWindow
         searchedPathStr.Clear();
     }
 
+    private string GetText(int id)
+    {
+        string str = "";
+        switch (language)
+        {
+            case Language.Japanese:
+                str = JapaneseVerText(id);
+                break;
+
+            case Language.English:
+                str = EnglishVerText(id);
+                break;
+        }
+
+        if (string.IsNullOrEmpty(str))
+        {
+            str = EnglishVerText(id);
+        }
+        return str;
+    }
+
+    private string EnglishVerText(int id)
+    {
+        switch (id)
+        {
+            case 1: return "This is the system of checking for using of the assets.";
+            case 2: return "Language";
+            case 3: return "Search Mode";
+            case 4: return "Result";
+            case 10: return "NONE";
+
+            case 100: return "1.Input the name you want to search";
+            case 101: return "2.Click the file path from Found Assets Area";
+            case 102: return "3.Print below on the Result area";
+            case 103: return "Asset Name:";
+            case 104: return "Filter";
+            case 105: return "Find Types:";
+            case 106: return "Found Assets";
+            case 107: return "Please enter any asset name";
+            case 108: return "except Packages";
+
+            case 200: return "Put the any object you want to search";
+            case 201: return "It is invalid object.";
+
+            case 300: return "Put the any folder you want to check.";
+            case 301: return "Display unused files at the bottom.";
+            case 302: return "It might take a time, so I recommend taking coffee break :)";
+            case 303: return "It is invalid object.";
+            case 304: return "Searched Path";
+
+        }
+        return " ";
+    }
+    private string JapaneseVerText(int id)
+    {
+        switch (id)
+        {
+            case 1: return "使用されているアセットを調べるツールです。";
+            case 2: return "言語";
+            case 3: return "検索モード";
+            case 4: return "結果";
+            case 10: return "なし";
+
+            case 100: return "1.調べたいアセット名を入れてください";
+            case 101: return "2.見つかったアセットのエリアに表示されたパスをクリックしてください。";
+            case 102: return "3.下にクリックされたAssetの使用元が検索され表示されます。";
+            case 103: return "アセット名:";
+            case 104: return "フィルタ";
+            case 105: return "見つけるタイプ:";
+            case 106: return "見つかったアセット";
+            case 107: return "なにかアセット名を入力してください。";
+            case 108: return "パッケージを含めない";
+
+
+            case 200: return "調べたいアセットを入れてください";
+            case 201: return "無効なオブジェクトです。";
+
+            case 300: return "調べたいフォルダを入れてください";
+            case 301: return "使用されていないファイルが下に表示されます。";
+            case 302: return "もしかしたら時間がかかるかもなので、コーヒーでも飲んでお待ちください（＾v＾）";
+            case 303: return "無効なオブジェクトです。";
+            case 304: return "検索したパス";
+        }
+        return " ";
+    }
+
+
     //UI切り替え
     void OnGUI()
     {
-        GUILayout.Label("This is the system of checking for using of the assets.", EditorStyles.label);
-        var mode = (SearchMode)EditorGUILayout.EnumPopup(new GUIContent("Search Mode"), searchMode, GUILayout.Width(300), GUILayout.Height(20));
-        EditorGUILayout.Space();
-        if (mode != searchMode)
+        EditorGUILayout.HelpBox(GetText(1), MessageType.Info);
+        language = (Language)EditorGUILayout.EnumPopup(new GUIContent(GetText(2)), language, GUILayout.Width(300));
+
+        var originalBgCol = GUI.backgroundColor;
+        GUI.backgroundColor = Color.green;
+        using (new EditorGUILayout.HorizontalScope())
         {
-            InitModes();
+            GUILayout.FlexibleSpace();
+            var mode = (SearchMode)GUILayout.Toolbar(
+                            (int)searchMode,
+                             menuToggle.Toggles);
+            GUILayout.FlexibleSpace();
+
+            if (mode != searchMode)
+            {
+                InitModes();
+            }
+            searchMode = mode;
         }
-        searchMode = mode;
+        GUI.backgroundColor = originalBgCol;
+        EditorGUILayout.Space();
+
         switch (searchMode)
         {
             case SearchMode.Input:
@@ -112,14 +257,14 @@ public class CheckAssetDependences : EditorWindow
             case SearchMode.Refer:
                 ShowReferMode();
                 break;
-            case SearchMode.InFile:
+            case SearchMode.InFolder:
                 ShowInFolderMode();
                 break;
         }
 
         if (resultStr.Count > 0)
         {
-            GUILayout.Label("Result", EditorStyles.boldLabel);
+            GUILayout.Label(GetText(4), EditorStyles.boldLabel);
             resultScroll = EditorGUILayout.BeginScrollView(resultScroll,
                 false,
                 true,
@@ -133,10 +278,10 @@ public class CheckAssetDependences : EditorWindow
             EditorGUILayout.EndScrollView();
         }
     }
-    #region InputMode
 
+    #region InputMode
     //トリガークラス
-    protected class FilterToggle
+    public class FilterToggle
     {
         public static bool isChanged = false;
 
@@ -163,16 +308,16 @@ public class CheckAssetDependences : EditorWindow
     //検索モード
     void ShowInputMode()
     {
-        GUILayout.Label("1.Input the name you want to search", EditorStyles.label);
-        GUILayout.Label("2.Click the file path from Found Assets Area", EditorStyles.label);
-        GUILayout.Label("3.Print below on the Result area", EditorStyles.label);
+        EditorGUILayout.LabelField(GetText(100));
+        EditorGUILayout.LabelField(GetText(101));
+        EditorGUILayout.LabelField(GetText(102));
 
         //検索名入力スペース
-        findName = EditorGUILayout.TextField("Asset Name:", findName, GUILayout.Width(position.width * 0.8f));
+        findName = EditorGUILayout.TextField(GetText(103), findName, GUILayout.Width(position.width * 0.8f));
 
         //検索タイプフィルタ
         bool refinder = false;
-        var hasFilter = EditorGUILayout.ToggleLeft("Filter", hasFilterTypes.target, EditorStyles.boldLabel);
+        var hasFilter = EditorGUILayout.ToggleLeft(GetText(104), hasFilterTypes.target, EditorStyles.boldLabel);
         if (hasFilter != hasFilterTypes.target)
         {
             refinder = true;
@@ -181,19 +326,28 @@ public class CheckAssetDependences : EditorWindow
 
         if (EditorGUILayout.BeginFadeGroup(hasFilterTypes.faded))
         {
-            GUILayout.Label("Find Types:", EditorStyles.largeLabel);
+            GUILayout.Label(GetText(105), EditorStyles.largeLabel);
 
             EditorGUILayout.BeginHorizontal();
             foreach (var toggle in filterToggles)
             {
                 toggle.Show();
             }
-            EditorGUILayout.EndHorizontal();
-            EditorGUILayout.EndFadeGroup();
+
+        }
+        EditorGUILayout.EndHorizontal();
+        EditorGUILayout.EndFadeGroup();
+
+        //パッケージ化を含めない
+        var ep = EditorGUILayout.ToggleLeft(GetText(108), exceptPackages);
+        if (exceptPackages != ep)
+        {
+            refinder = true;
+            exceptPackages = ep;
         }
 
         //検索結果表示領域
-        GUILayout.Label("Found Assets", EditorStyles.boldLabel);
+        GUILayout.Label(GetText(106), EditorStyles.boldLabel);
         foundScroll = EditorGUILayout.BeginScrollView(foundScroll,
             false,
             true,
@@ -217,8 +371,6 @@ public class CheckAssetDependences : EditorWindow
         FilterToggle.isChanged = false;
     }
 
-
-
     string GetTypeString(AssetType type)
     {
         switch (type)
@@ -231,6 +383,8 @@ public class CheckAssetDependences : EditorWindow
                 return "prefab";
             case AssetType.Script:
                 return "script";
+            case AssetType.Mesh:
+                return "mesh";
         }
         return "";
     }
@@ -244,7 +398,7 @@ public class CheckAssetDependences : EditorWindow
 
         if (name.Length < 1)
         {
-            EditorGUILayout.TextField("Please enter any asset name", EditorStyles.boldLabel);
+            EditorGUILayout.TextField(GetText(107), EditorStyles.boldLabel);
             return;
         }
 
@@ -267,6 +421,7 @@ public class CheckAssetDependences : EditorWindow
     }
 
     #region labelButton
+    [Serializable]
     protected class PathLabelButton
     {
         public string path;
@@ -320,6 +475,11 @@ public class CheckAssetDependences : EditorWindow
             foreach (var guid in guids)
             {
                 string path = AssetDatabase.GUIDToAssetPath(guid);
+                if (exceptPackages
+                    && path.StartsWith("Packages/"))
+                {
+                    continue;
+                }
                 var pathLabel = new PathLabelButton(path, guid, type);
                 pathLabel.callback = CheckUsing;
                 pathLabels.Add(pathLabel);
@@ -348,8 +508,8 @@ public class CheckAssetDependences : EditorWindow
     //参照検索モード
     void ShowReferMode()
     {
-        GUILayout.Label("Put the any object you want to search", EditorStyles.label);
-        var obj = EditorGUILayout.ObjectField(referObj, typeof(Object), true);
+        GUILayout.Label(GetText(200), EditorStyles.label);
+        var obj = EditorGUILayout.ObjectField(referObj, typeof(UnityEngine.Object), true);
         if (obj != null && !obj.Equals(referObj))
         { //セットされた型のチェック
             var objType = obj.GetType();
@@ -359,7 +519,7 @@ public class CheckAssetDependences : EditorWindow
                 || objType.Equals(typeof(Material))
                 || objType.Equals(typeof(GameObject))
                 || objType.Equals(typeof(MonoScript))
-
+                || objType.Equals(typeof(Mesh))
             )
             {
                 string path = AssetDatabase.GetAssetPath(obj);
@@ -369,7 +529,7 @@ public class CheckAssetDependences : EditorWindow
             }
             else
             {
-                resultStr.Add("It is invalid object.");
+                resultStr.Add(GetText(201));
                 referObj = obj;
                 return;
             }
@@ -439,7 +599,7 @@ public class CheckAssetDependences : EditorWindow
 
         if (resultStr.Count < 1)
         {
-            resultStr.Add("NONE");
+            resultStr.Add(GetText(10));
         }
     }
 
@@ -448,11 +608,11 @@ public class CheckAssetDependences : EditorWindow
     //フォルダ一括検索モード　使われていないものを表示
     void ShowInFolderMode()
     {
-        GUILayout.Label("Put the any folder you want to check.", EditorStyles.label);
-        GUILayout.Label("Display unused files at the bottom.", EditorStyles.label);
-        GUILayout.Label("It might take a time, so I recommend taking coffee break :)", EditorStyles.label);
+        GUILayout.Label(GetText(300), EditorStyles.label);
+        GUILayout.Label(GetText(301), EditorStyles.label);
+        GUILayout.Label(GetText(302), EditorStyles.label);
 
-        var obj = EditorGUILayout.ObjectField(folder, typeof(Object), true);
+        var obj = EditorGUILayout.ObjectField(folder, typeof(UnityEngine.Object), false);
         if (obj != null && !obj.Equals(folder))
         {
             resultScroll = Vector2.zero;
@@ -465,8 +625,11 @@ public class CheckAssetDependences : EditorWindow
             }
 
             var path = AssetDatabase.GetAssetOrScenePath(obj);
+
             if (System.IO.Directory.Exists(path))
             {    //フォルダかどうかチェック
+                folder = obj;
+
                 string[] folderGuids = AssetDatabase.FindAssets("t:prefab t:material t:texture t:script", new string[] { path });
                 foreach (var guid in folderGuids)
                 {
@@ -493,18 +656,18 @@ public class CheckAssetDependences : EditorWindow
                 }
                 if (resultStr.Count < 1)
                 {
-                    resultStr.Add("NONE");
+                    resultStr.Add(GetText(10));
                 }
             }
             else
             {
-                resultStr.Add("It is invalid object."); //設定されたのがフォルダではない
+                resultStr.Add(GetText(303)); //設定されたのがフォルダではない
+                folder = null;
             }
         }
-        folder = obj;
 
         //検索対象表示領域
-        GUILayout.Label("Searched Path", EditorStyles.boldLabel);
+        GUILayout.Label(GetText(304), EditorStyles.boldLabel);
         searchedScroll = EditorGUILayout.BeginScrollView(searchedScroll,
             false,
             true,
