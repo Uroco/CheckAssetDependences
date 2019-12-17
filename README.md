@@ -1,0 +1,2 @@
+# CheckAssetDependences
+未使用アセットのチェックとかするやつ
